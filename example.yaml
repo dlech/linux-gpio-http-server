@@ -1,0 +1,9 @@
+chips:
+  - name: my-thing
+    match:
+      ID_USB_SERIAL_SHORT: XXXXXX
+    pins:
+      - name: power
+        pin: 0
+      - name: reset
+        pin: 1

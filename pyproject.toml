@@ -12,6 +12,7 @@ dependencies = [
     "gpiod>=2.4.0",
     "pyudev>=0.24.4",
     "ruamel-yaml>=0.19.1",
+    "waitress>=3.0.2",
 ]
 
 [project.scripts]

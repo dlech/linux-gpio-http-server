@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, TypedDict, cast
@@ -65,14 +66,18 @@ def _load_config(path: Path) -> ServerConfig:
         match_raw = item.get("match")
 
         if not isinstance(match_raw, dict):
-            raise ValueError("each chip must have 'match' mapping of string keys/values")
+            raise ValueError(
+                "each chip must have 'match' mapping of string keys/values"
+            )
 
         match_items = cast(dict[object, object], match_raw)
         match: dict[str, str] = {}
 
         for key, value in match_items.items():
             if not isinstance(key, str) or not isinstance(value, str):
-                raise ValueError("each chip must have 'match' mapping of string keys/values")
+                raise ValueError(
+                    "each chip must have 'match' mapping of string keys/values"
+                )
 
             match[key] = value
 
@@ -98,7 +103,9 @@ def _load_config(path: Path) -> ServerConfig:
                 raise ValueError("each pin must have string 'name'")
 
             if not isinstance(pin_id, int | str):
-                raise ValueError("each pin must have 'pin' as int offset or string line name")
+                raise ValueError(
+                    "each pin must have 'pin' as int offset or string line name"
+                )
 
             pins.append(PinConfig(name=pin_name, pin=pin_id))
 
@@ -111,10 +118,15 @@ def _load_config(path: Path) -> ServerConfig:
 def _matches_ancestors(device: pyudev.Device, match: Mapping[str, str]) -> bool:
     current: pyudev.Device | None = device
 
-    LOGGER.debug("Looking for match=%s in device %s and its ancestors", match, device.device_path)
+    LOGGER.debug(
+        "Looking for match=%s in device %s and its ancestors", match, device.device_path
+    )
 
     while current is not None:
-        if all(str(current.properties.get(key)) == str(value) for key, value in match.items()):
+        if all(
+            str(current.properties.get(key)) == str(value)
+            for key, value in match.items()
+        ):
             LOGGER.debug("Match found at udev device %s", current.device_path)
             return True
 
@@ -151,23 +163,11 @@ def _parse_on_off(raw: str) -> bool:
     raise ValueError("request body must be exactly 'On' or 'Off'")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="HTTP server for Linux GPIO chips")
-    parser.add_argument("config", help="Path to YAML config file")
-    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to server")
-    parser.add_argument("--port", type=int, default=8000, help="Port to bind to server")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    args = parser.parse_args()
+def create_app_from_path(config_path: Path | str) -> Flask:
+    config_path_obj = Path(config_path)
+    LOGGER.info("Loading configuration from %s", config_path_obj)
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.debug else logging.INFO,
-        format="%(asctime)s.%(msecs)03d %(levelname)s %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    LOGGER.info("Loading configuration from %s", args.config)
-
-    config = _load_config(Path(args.config))
+    config = _load_config(config_path_obj)
     context = pyudev.Context()
 
     chip_devpaths: dict[str, str] = {}
@@ -186,7 +186,9 @@ def main() -> None:
             LOGGER.error("No gpiochip found for '%s' with match=%s", chip_name, match)
             raise SystemExit(1)
 
-        chip_devpaths[chip_name] = str(device.properties.get("DEVPATH") or device.device_path)
+        chip_devpaths[chip_name] = str(
+            device.properties.get("DEVPATH") or device.device_path
+        )
         chip_nodes[chip_name] = str(device.device_node)
         LOGGER.info(
             "Matched chip '%s' to node=%s devpath=%s",
@@ -207,13 +209,17 @@ def main() -> None:
         chip = gpiod.Chip(chip_nodes[chip_name])
         LOGGER.info("Requesting lines for chip '%s'", chip_name)
 
-        line_config: dict[Iterable[int | str] | int | str, gpiod.LineSettings | None] = {}
+        line_config: dict[
+            Iterable[int | str] | int | str, gpiod.LineSettings | None
+        ] = {}
 
         for pin in item["pins"]:
             pin_name = pin["name"]
             pin_id = pin["pin"]
 
-            offset = pin_id if isinstance(pin_id, int) else chip.line_offset_from_id(pin_id)
+            offset = (
+                pin_id if isinstance(pin_id, int) else chip.line_offset_from_id(pin_id)
+            )
             pin_offsets[chip_name][pin_name] = int(offset)
             pin_request_ids[chip_name][pin_name] = pin_id
             line_config[pin_id] = gpiod.LineSettings(direction=Direction.OUTPUT)
@@ -254,8 +260,12 @@ def main() -> None:
             return jsonify({"error": f"unknown chip '{chip_name}'"}), 404
 
         if pin_name not in pin_request_ids[chip_name]:
-            LOGGER.warning("Request for unknown pin '%s' on chip '%s'", pin_name, chip_name)
-            return jsonify({"error": f"unknown pin '{pin_name}' for chip '{chip_name}'"}), 404
+            LOGGER.warning(
+                "Request for unknown pin '%s' on chip '%s'", pin_name, chip_name
+            )
+            return jsonify(
+                {"error": f"unknown pin '{pin_name}' for chip '{chip_name}'"}
+            ), 404
 
         line_request = requests_by_chip[chip_name]
         line_id = pin_request_ids[chip_name][pin_name]
@@ -266,7 +276,9 @@ def main() -> None:
             return "On" if value == Value.ACTIVE else "Off"
 
         raw_body = request.get_data(as_text=True)
-        LOGGER.debug("PUT body for chip='%s' pin='%s': %r", chip_name, pin_name, raw_body)
+        LOGGER.debug(
+            "PUT body for chip='%s' pin='%s': %r", chip_name, pin_name, raw_body
+        )
 
         try:
             bool_value = _parse_on_off(raw_body)
@@ -300,6 +312,34 @@ def main() -> None:
         value = line_request.get_value(line_id)
         LOGGER.debug("Read chip='%s' pin='%s' value=%s", chip_name, pin_name, value)
         return "On" if value == Value.ACTIVE else "Off"
+
+    return app
+
+
+def create_app() -> Flask:
+    config_path = os.environ.get(
+        "LINUX_GPIO_HTTP_SERVER_CONFIG", "/etc/linux-gpio-http-server.yaml"
+    )
+    LOGGER.debug("Using config path %s", config_path)
+
+    return create_app_from_path(config_path)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="HTTP server for Linux GPIO chips")
+    parser.add_argument("config", help="Path to YAML config file")
+    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to server")
+    parser.add_argument("--port", type=int, default=8000, help="Port to bind to server")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(asctime)s.%(msecs)03d %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    app = create_app_from_path(args.config)
 
     LOGGER.info("Starting HTTP server on %s:%d", args.host, args.port)
     app.run(host=args.host, port=args.port)
