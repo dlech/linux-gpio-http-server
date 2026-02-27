@@ -1,0 +1,15 @@
+[Unit]
+Description=Linux GPIO HTTP Server (waitress)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+SupplementaryGroups=_gpio
+ExecStart=/usr/bin/waitress-serve --listen=127.0.0.1:8000 --call linux_gpio_http_server:create_app
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
