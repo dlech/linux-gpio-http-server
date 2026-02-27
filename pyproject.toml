@@ -1,0 +1,21 @@
+[project]
+name = "linux-gpio-http-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "David Lechner", email = "dlechner@baylibre.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.13.3",
+    "gpiod>=2.4.0",
+    "pyudev>=0.24.4",
+]
+
+[project.scripts]
+linux-gpio-http-server = "linux_gpio_http_server:main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
